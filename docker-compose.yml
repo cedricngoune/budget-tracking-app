@@ -1,0 +1,60 @@
+version: '3.9'
+
+services:
+  # ── MongoDB ─────────────────────────────────────────
+  mongo:
+    image: mongo:7.0
+    container_name: budget-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: budget-tracker
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── NestJS API ──────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: budget-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      MONGODB_URI: mongodb://mongo:27017/budget-tracker
+      FRONTEND_URL: http://localhost:5000
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/api/transactions/summary"]
+      interval: 20s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── React Frontend ──────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: budget-frontend
+    restart: unless-stopped
+    ports:
+      - "5000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  mongo-data:
+    name: budget-tracking-mongo
