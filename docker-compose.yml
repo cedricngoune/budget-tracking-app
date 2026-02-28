@@ -1,23 +1,25 @@
 version: '3.9'
 
 services:
-  # ── MongoDB ─────────────────────────────────────────
-  mongo:
-    image: mongo:7.0
-    container_name: budget-mongo
+  # ── PostgreSQL ───────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: budget-postgres
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      - "5432:5432"
     environment:
-      MONGO_INITDB_DATABASE: budget-tracker
+      POSTGRES_USER: budget
+      POSTGRES_PASSWORD: budget_secret
+      POSTGRES_DB: budget_tracker
     volumes:
-      - mongo-data:/data/db
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD-SHELL", "pg_isready -U budget -d budget_tracker"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 15s
+      start_period: 10s
 
   # ── NestJS API ──────────────────────────────────────
   backend:
@@ -26,21 +28,19 @@ services:
       dockerfile: Dockerfile
     container_name: budget-backend
     restart: unless-stopped
+    env_file:
+      - ./backend/.env.docker
     ports:
       - "8080:8080"
-    environment:
-      PORT: 8080
-      MONGODB_URI: mongodb://mongo:27017/budget-tracker
-      FRONTEND_URL: http://localhost:5000
     depends_on:
-      mongo:
+      postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/api/transactions/summary"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/transactions/summary"]
       interval: 20s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 30s
 
   # ── React Frontend ──────────────────────────────────
   frontend:
@@ -50,11 +50,11 @@ services:
     container_name: budget-frontend
     restart: unless-stopped
     ports:
-      - "5000:80"
+      - "3000:80"
     depends_on:
       backend:
         condition: service_healthy
 
 volumes:
-  mongo-data:
-    name: budget-tracking-mongo
+  postgres-data:
+    name: budget-tracking-postgres

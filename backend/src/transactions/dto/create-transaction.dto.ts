@@ -1,33 +1,48 @@
-import {IsIn, IsNotEmpty, IsNumber, IsPositive, IsString, MaxLength, Matches, IsEnum} from 'class-validator';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsNumber,
+  IsPositive,
+  IsString,
+  IsBoolean,
+  IsOptional,
+  MaxLength,
+  Matches,
+} from 'class-validator';
 import { Type } from 'class-transformer';
+import { BANKS, CATEGORIES } from '../constants/transaction.constants';
 
-enum TransactionType {
-  INCOME = 'income',
-  EXPENSE = 'expense',
-}
 export class CreateTransactionDto {
-  @IsEnum(TransactionType)
-  @IsNotEmpty()
+  @IsIn(['income', 'expense'])
   type: 'income' | 'expense';
 
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @IsNotEmpty()
   @IsPositive()
   amount: number;
-
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(10)
-  currency: string;
 
   @IsString()
   @IsNotEmpty()
   @MaxLength(500)
   description: string;
 
+  // Optionnel : absent = transaction prévisionnelle
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @Matches(/^\d{2}-\d{2}-\d{4}$/, { message: 'date must be DD-MM-YYYY' })
-  date: string;
+  date?: string;
+
+  @IsIn(BANKS)
+  bank: string;
+
+  @IsIn(CATEGORIES)
+  category: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isRecurring?: boolean;
+
+  @IsOptional()
+  @IsIn(['daily', 'weekly', 'monthly', 'yearly'])
+  recurringFrequency?: string;
 }

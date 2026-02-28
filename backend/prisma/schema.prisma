@@ -1,0 +1,46 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────
+
+enum TransactionType {
+  income
+  expense
+}
+
+enum RecurringFrequency {
+  daily
+  weekly
+  monthly
+  yearly
+}
+
+// ─── Transaction ─────────────────────────────────────────────
+
+model Transaction {
+  id          String          @id @default(cuid())
+  type        TransactionType
+  amount      Decimal         @db.Decimal(15, 2)
+  currency    String          @default("EUR") @db.VarChar(10)
+  description String          @db.VarChar(500)
+  date        String?         @db.VarChar(10)
+  bank        String          @db.VarChar(50)
+  category    String          @db.VarChar(50)
+  isPending   Boolean         @default(false)
+  isRecurring         Boolean             @default(false)
+  recurringFrequency  RecurringFrequency?
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([isPending, createdAt])
+  @@index([type, bank, category])
+  @@index([date])
+  @@index([isRecurring])
+}

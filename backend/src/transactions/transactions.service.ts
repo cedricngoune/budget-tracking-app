@@ -1,93 +1,193 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { Transaction, TransactionDocument } from './schemas/transaction.schema';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { ConfirmTransactionDto } from './dto/confirm-transaction.dto';
+import { Prisma, TransactionType, RecurringFrequency } from '@prisma/client';
+
+export interface TransactionFilters {
+  type?: string;
+  bank?: string;
+  category?: string;
+  month?: string; // format MM-YYYY
+  isPending?: boolean;
+}
 
 export interface Summary {
-  totalIncome: number;
-  totalExpense: number;
-  balance: number;
+  // Solde courant = transactions réelles uniquement (isPending = false)
+  currentBalance: number;
+  currentIncome: number;
+  currentExpense: number;
+
+  // Solde prévisionnel = courant + transactions en attente
+  forecastBalance: number;
+  forecastIncome: number;
+  forecastExpense: number;
+
+  // Charges fixes récurrentes mensuelles
+  monthlyRecurringTotal: number;
+
   count: number;
-  byCurrency: Record<string, { income: number; expense: number; balance: number; count: number }>;
+  pendingCount: number;
+
+  byBank: Record<string, { income: number; expense: number; balance: number }>;
+  byCategory: Record<string, { income: number; expense: number; total: number }>;
 }
 
 @Injectable()
 export class TransactionsService {
-  constructor(
-    @InjectModel(Transaction.name)
-    private transactionModel: Model<TransactionDocument>,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateTransactionDto): Promise<TransactionDocument> {
-    const created = new this.transactionModel(dto);
-    return created.save();
-  }
+  // ── Création ────────────────────────────────────────────────
+  async create(dto: CreateTransactionDto) {
+    const isPending = !dto.date;
 
-  async findAll(filters: { type?: string; currency?: string } = {}): Promise<TransactionDocument[]> {
-    const query: Record<string, any> = {};
-    if (filters.type) query.type = filters.type;
-    if (filters.currency) query.currency = filters.currency;
-    return this.transactionModel.find(query).sort({ date: -1, createdAt: -1 }).exec();
-  }
-
-  async findOne(id: string): Promise<TransactionDocument> {
-    if (!Types.ObjectId.isValid(id)) throw new NotFoundException(`Invalid id: ${id}`);
-    const doc = await this.transactionModel.findById(id).exec();
-    if (!doc) throw new NotFoundException(`Transaction ${id} not found`);
-    return doc;
-  }
-
-  async remove(id: string): Promise<void> {
-    if (!Types.ObjectId.isValid(id)) throw new NotFoundException(`Invalid id: ${id}`);
-    const result = await this.transactionModel.findByIdAndDelete(id).exec();
-    if (!result) throw new NotFoundException(`Transaction ${id} not found`);
-  }
-
-  async getSummary(): Promise<Summary> {
-    const pipeline = [
-      {
-        $group: {
-          _id: {
-            currency: '$currency',
-            type: '$type',
-          },
-          total: { $sum: '$amount' },
-          count: { $sum: 1 },
-        },
+    return this.prisma.transaction.create({
+      data: {
+        type:               dto.type as TransactionType,
+        amount:             new Prisma.Decimal(dto.amount),
+        currency:           'EUR',
+        description:        dto.description,
+        date:               dto.date ?? null,
+        bank:               dto.bank,
+        category:           dto.category,
+        isPending,
+        isRecurring:        dto.isRecurring ?? false,
+        recurringFrequency: dto.recurringFrequency
+                              ? (dto.recurringFrequency as RecurringFrequency)
+                              : null,
       },
-    ];
+    });
+  }
 
-    const agg = await this.transactionModel.aggregate(pipeline).exec();
+  // ── Confirmer une transaction prévisionnelle ─────────────────
+  async confirm(id: string, dto: ConfirmTransactionDto) {
+    await this.findOne(id);
+    return this.prisma.transaction.update({
+      where: { id },
+      data: {
+        date:      dto.date,
+        isPending: false,
+      },
+    });
+  }
 
-    const byCurrency: Summary['byCurrency'] = {};
-    let totalIncome = 0;
-    let totalExpense = 0;
-    let count = 0;
+  // ── Liste avec filtres ───────────────────────────────────────
+  async findAll(filters: TransactionFilters = {}) {
+    const where: Prisma.TransactionWhereInput = {};
 
-    for (const row of agg) {
-      const { currency, type } = row._id;
-      if (!byCurrency[currency]) {
-        byCurrency[currency] = { income: 0, expense: 0, balance: 0, count: 0 };
-      }
-      byCurrency[currency][type as 'income' | 'expense'] += row.total;
-      byCurrency[currency].count += row.count;
-      count += row.count;
+    if (filters.type)     where.type     = filters.type as TransactionType;
+    if (filters.bank)     where.bank     = filters.bank ;
+    if (filters.category) where.category = filters.category ;
 
-      if (type === 'income') totalIncome += row.total;
-      else totalExpense += row.total;
+    // isPending explicite ou par défaut on retourne les transactions réelles
+    if (typeof filters.isPending === 'boolean') {
+      where.isPending = filters.isPending;
+    } else {
+      where.isPending = false;
     }
 
-    for (const c of Object.values(byCurrency)) {
-      c.balance = c.income - c.expense;
+    // Filtre par mois (format MM-YYYY) → cherche dans le champ date DD-MM-YYYY
+    if (filters.month) {
+      const [mm, yyyy] = filters.month.split('-');
+      where.date = { contains: `${mm}-${yyyy}` };
     }
+
+    return this.prisma.transaction.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ── Transactions prévisionnelles (isPending = true) ──────────
+  async findPending() {
+    return this.prisma.transaction.findMany({
+      where:   { isPending: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ── Récurrentes ──────────────────────────────────────────────
+  async findRecurring() {
+    return this.prisma.transaction.findMany({
+      where:   { isRecurring: true, isPending: false },
+      orderBy: { category: 'asc' },
+    });
+  }
+
+  // ── Détail ───────────────────────────────────────────────────
+  async findOne(id: string) {
+    const tx = await this.prisma.transaction.findUnique({ where: { id } });
+    if (!tx) throw new NotFoundException(`Transaction ${id} introuvable`);
+    return tx;
+  }
+
+  // ── Suppression ──────────────────────────────────────────────
+  async remove(id: string) {
+    await this.findOne(id);
+    await this.prisma.transaction.delete({ where: { id } });
+  }
+
+  // ── Résumé / Dashboard ──────────────────────────────────────
+  async getSummary(): Promise<Summary> {
+    const all = await this.prisma.transaction.findMany();
+
+    const real    = all.filter(t => !t.isPending);
+    const pending = all.filter(t => t.isPending);
+    const recurring = real.filter(t => t.isRecurring && t.type === 'expense');
+
+    // Solde courant
+    let currentIncome  = 0;
+    let currentExpense = 0;
+    const byBank: Summary['byBank']         = {};
+    const byCategory: Summary['byCategory'] = {};
+
+    for (const t of real) {
+      const amount = Number(t.amount);
+
+      if (t.type === 'income') currentIncome  += amount;
+      else                      currentExpense += amount;
+
+      // Par banque
+      if (!byBank[t.bank]) byBank[t.bank] = { income: 0, expense: 0, balance: 0 };
+      if (t.type === 'income') byBank[t.bank].income  += amount;
+      else                      byBank[t.bank].expense += amount;
+      byBank[t.bank].balance = byBank[t.bank].income - byBank[t.bank].expense;
+
+      // Par catégorie
+      if (!byCategory[t.category]) byCategory[t.category] = { income: 0, expense: 0, total: 0 };
+      if (t.type === 'income') byCategory[t.category].income  += amount;
+      else                      byCategory[t.category].expense += amount;
+      byCategory[t.category].total = byCategory[t.category].income - byCategory[t.category].expense;
+    }
+
+    // Solde prévisionnel = courant + charges en attente
+    let pendingIncome  = 0;
+    let pendingExpense = 0;
+    for (const t of pending) {
+      const amount = Number(t.amount);
+      if (t.type === 'income') pendingIncome  += amount;
+      else                      pendingExpense += amount;
+    }
+
+    // Charges récurrentes mensuelles
+    const monthlyRecurringTotal = recurring
+      .filter(t => t.recurringFrequency === 'monthly')
+      .reduce((acc, t) => acc + Number(t.amount), 0);
 
     return {
-      totalIncome,
-      totalExpense,
-      balance: totalIncome - totalExpense,
-      count,
-      byCurrency,
+      currentIncome,
+      currentExpense,
+      currentBalance: currentIncome - currentExpense,
+
+      forecastIncome:  currentIncome  + pendingIncome,
+      forecastExpense: currentExpense + pendingExpense,
+      forecastBalance: (currentIncome - currentExpense) + (pendingIncome - pendingExpense),
+
+      monthlyRecurringTotal,
+      count:        real.length,
+      pendingCount: pending.length,
+      byBank,
+      byCategory,
     };
   }
 }
