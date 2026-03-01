@@ -13,6 +13,10 @@ import { Type } from 'class-transformer';
 import { BANKS, CATEGORIES } from '../constants/transaction.constants';
 
 export class CreateTransactionDto {
+  @IsString()
+  @IsNotEmpty()
+  userId: string;
+
   @IsIn(['income', 'expense'])
   type: 'income' | 'expense';
 

@@ -21,6 +21,18 @@ enum RecurringFrequency {
   yearly
 }
 
+// ─── User ─────────────────────────────────────────────────────
+
+model User {
+  id           String        @id @default(cuid())
+  name         String        @db.VarChar(50)
+  color        String        @db.VarChar(20)
+  banks        String[]      @default([])
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  transactions Transaction[]
+}
+
 // ─── Transaction ─────────────────────────────────────────────
 
 model Transaction {
@@ -36,6 +48,9 @@ model Transaction {
   isRecurring         Boolean             @default(false)
   recurringFrequency  RecurringFrequency?
 
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -43,4 +58,5 @@ model Transaction {
   @@index([type, bank, category])
   @@index([date])
   @@index([isRecurring])
+  @@index([userId])
 }

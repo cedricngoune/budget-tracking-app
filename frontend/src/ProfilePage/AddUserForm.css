@@ -1,0 +1,90 @@
+/* ── Color picker ── */
+.color-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.color-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: var(--swatch-bg, rgba(201,168,76,.18));
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .15s, border-color .15s, box-shadow .15s;
+  padding: 0;
+}
+
+.color-swatch:hover {
+  transform: scale(1.12);
+}
+
+.color-swatch.selected {
+  border-color: var(--swatch-color, #c9a84c);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--swatch-color, #c9a84c) 30%, transparent);
+}
+
+.color-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--swatch-color, #c9a84c);
+  display: block;
+}
+
+/* ── Hint text ── */
+.add-user-hint {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--txt-3);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+/* ── Dialog action buttons ── */
+.btn-cancel {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  color: var(--txt-3);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 10px 18px;
+  transition: border-color .2s, color .2s;
+}
+
+.btn-cancel:hover {
+  border-color: var(--border-lite);
+  color: var(--txt-2);
+}
+
+.btn-confirm {
+  background: var(--gold-dim);
+  border: 1px solid var(--gold);
+  border-radius: var(--r);
+  color: var(--gold-bright);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  padding: 10px 18px;
+  transition: all .2s;
+}
+
+.btn-confirm:hover:not(:disabled) {
+  background: var(--gold);
+  color: var(--bg-base);
+  box-shadow: 0 0 16px rgba(201,168,76,.3);
+}
+
+.btn-confirm:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}

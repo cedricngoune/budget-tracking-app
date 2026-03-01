@@ -5,6 +5,7 @@ import { ConfirmTransactionDto } from './dto/confirm-transaction.dto';
 import { Prisma, TransactionType, RecurringFrequency } from '@prisma/client';
 
 export interface TransactionFilters {
+  userId: string;
   type?: string;
   bank?: string;
   category?: string;
@@ -43,6 +44,7 @@ export class TransactionsService {
 
     return this.prisma.transaction.create({
       data: {
+        userId:             dto.userId,
         type:               dto.type as TransactionType,
         amount:             new Prisma.Decimal(dto.amount),
         currency:           'EUR',
@@ -60,8 +62,8 @@ export class TransactionsService {
   }
 
   // ── Confirmer une transaction prévisionnelle ─────────────────
-  async confirm(id: string, dto: ConfirmTransactionDto) {
-    await this.findOne(id);
+  async confirm(id: string, dto: ConfirmTransactionDto, userId: string) {
+    await this.findOne(id, userId);
     return this.prisma.transaction.update({
       where: { id },
       data: {
@@ -72,14 +74,13 @@ export class TransactionsService {
   }
 
   // ── Liste avec filtres ───────────────────────────────────────
-  async findAll(filters: TransactionFilters = {}) {
-    const where: Prisma.TransactionWhereInput = {};
+  async findAll(filters: TransactionFilters) {
+    const where: Prisma.TransactionWhereInput = { userId: filters.userId };
 
     if (filters.type)     where.type     = filters.type as TransactionType;
-    if (filters.bank)     where.bank     = filters.bank ;
-    if (filters.category) where.category = filters.category ;
+    if (filters.bank)     where.bank     = filters.bank;
+    if (filters.category) where.category = filters.category;
 
-    // isPending explicite ou par défaut on retourne les transactions réelles
     if (typeof filters.isPending === 'boolean') {
       where.isPending = filters.isPending;
     } else {
@@ -99,37 +100,39 @@ export class TransactionsService {
   }
 
   // ── Transactions prévisionnelles (isPending = true) ──────────
-  async findPending() {
+  async findPending(userId: string) {
     return this.prisma.transaction.findMany({
-      where:   { isPending: true },
+      where:   { userId, isPending: true },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   // ── Récurrentes ──────────────────────────────────────────────
-  async findRecurring() {
+  async findRecurring(userId: string) {
     return this.prisma.transaction.findMany({
-      where:   { isRecurring: true, isPending: false },
+      where:   { userId, isRecurring: true, isPending: false },
       orderBy: { category: 'asc' },
     });
   }
 
   // ── Détail ───────────────────────────────────────────────────
-  async findOne(id: string) {
-    const tx = await this.prisma.transaction.findUnique({ where: { id } });
+  async findOne(id: string, userId: string) {
+    const tx = await this.prisma.transaction.findFirst({ where: { id, userId } });
     if (!tx) throw new NotFoundException(`Transaction ${id} introuvable`);
     return tx;
   }
 
   // ── Suppression ──────────────────────────────────────────────
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, userId: string) {
+    await this.findOne(id, userId);
     await this.prisma.transaction.delete({ where: { id } });
   }
 
   // ── Résumé / Dashboard ──────────────────────────────────────
-  async getSummary(): Promise<Summary> {
-    const all = await this.prisma.transaction.findMany();
+  async getBalance(userId: string, bank?: string): Promise<Summary> {
+    const where: Prisma.TransactionWhereInput = { userId };
+    if (bank) where.bank = bank;
+    const all = await this.prisma.transaction.findMany({ where });
 
     const real    = all.filter(t => !t.isPending);
     const pending = all.filter(t => t.isPending);

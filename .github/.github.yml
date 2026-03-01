@@ -1,4 +1,4 @@
-name: CI/CD — BudgetTrack
+name: BudgetTrack
 
 on:
   push:
@@ -28,17 +28,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: 'yarn'
           cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --immutable
 
       - name: TypeScript check
-        run: npx tsc --noEmit
+        run: ynpx tsc --noEmit
 
       - name: ESLint
-        run: npm run lint
+        run: yarn lint
 
   lint-frontend:
     name: 🔍 Lint — Frontend
@@ -55,17 +55,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: 'yarn'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --immutable
 
       - name: TypeScript check
-        run: npx tsc --noEmit
+        run: ynpx tsc --noEmit
 
       - name: ESLint
-        run: npm run lint
+        run: yarn lint
 
   # ─────────────────────────────────────────────────────────────
   # STAGE 2 — BUILD
@@ -86,14 +86,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: 'yarn'
           cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --immutable
 
       - name: Build NestJS
-        run: npm run build
+        run: yarn build
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -118,14 +118,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: 'yarn'
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: yarn install --immutable
 
       - name: Build Vite
-        run: npm run build
+        run: yarn build
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
 

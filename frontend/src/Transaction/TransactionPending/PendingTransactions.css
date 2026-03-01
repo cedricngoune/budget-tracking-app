@@ -1,0 +1,31 @@
+/* ── Pending items ── */
+.tx-item.pending { border-left: 3px solid #475569; opacity: .85; }
+.tx-item.pending:hover { opacity: 1; border-left-color: #94a3b8; }
+
+.pending-icon  { background: rgba(148,163,184,.12) !important; color: #94a3b8 !important; }
+.pending-amount { color: #94a3b8 !important; }
+
+/* ── Inline confirm row ── */
+.confirm-row {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.confirm-date { padding: 7px 10px !important; font-size: 12px !important; width: auto !important; flex: 1; }
+
+.btn-confirm {
+  background: var(--income-dim); border: 1px solid rgba(74,222,128,.3);
+  border-radius: var(--r); color: var(--income);
+  cursor: pointer; font-family: var(--mono); font-size: 11px;
+  padding: 7px 13px; white-space: nowrap; transition: all .2s;
+}
+.btn-confirm:hover:not(:disabled) { background: var(--income); color: var(--bg-base); }
+.btn-confirm:disabled { opacity: .4; cursor: wait; }
+
+.btn-cancel {
+  background: transparent; border: 1px solid var(--border);
+  border-radius: var(--r); color: var(--txt-3);
+  cursor: pointer; font-family: var(--mono); font-size: 11px;
+  padding: 7px 10px; transition: all .2s;
+}
+.btn-cancel:hover { border-color: var(--border-lite); color: var(--txt-1); }

@@ -31,49 +31,63 @@ export class TransactionsController {
   // PATCH /api/transactions/:id/confirm — confirme une transaction prévisionnelle
   @Patch(':id/confirm')
   @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
-  confirm(@Param('id') id: string, @Body() dto: ConfirmTransactionDto) {
-    return this.transactionsService.confirm(id, dto);
+  confirm(
+    @Param('id') id: string,
+    @Body() dto: ConfirmTransactionDto,
+    @Query('userId') userId: string,
+  ) {
+    return this.transactionsService.confirm(id, dto, userId);
   }
 
-  // GET /api/transactions/summary
-  @Get('summary')
-  getSummary() {
-    return this.transactionsService.getSummary();
+  // GET /api/transactions/balance?userId=&bank=
+  @Get('balance')
+  getBalance(
+    @Query('userId') userId: string,
+    @Query('bank') bank?: string,
+  ) {
+    return this.transactionsService.getBalance(userId, bank);
   }
 
-  // GET /api/transactions/pending
+  // GET /api/transactions/pending?userId=
   @Get('pending')
-  findPending() {
-    return this.transactionsService.findPending();
+  findPending(@Query('userId') userId: string) {
+    return this.transactionsService.findPending(userId);
   }
 
-  // GET /api/transactions/recurring
+  // GET /api/transactions/recurring?userId=
   @Get('recurring')
-  findRecurring() {
-    return this.transactionsService.findRecurring();
+  findRecurring(@Query('userId') userId: string) {
+    return this.transactionsService.findRecurring(userId);
   }
 
-  // GET /api/transactions?type=&bank=&category=&month=MM-YYYY
+  // GET /api/transactions?userId=&type=&bank=&category=&month=MM-YYYY
   @Get()
   findAll(
+    @Query('userId')   userId: string,
     @Query('type')     type?: string,
     @Query('bank')     bank?: string,
     @Query('category') category?: string,
     @Query('month')    month?: string,
   ) {
-    return this.transactionsService.findAll({ type, bank, category, month });
+    return this.transactionsService.findAll({ userId, type, bank, category, month });
   }
 
-  // GET /api/transactions/:id
+  // GET /api/transactions/:id?userId=
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.transactionsService.findOne(id);
+  findOne(
+    @Param('id') id: string,
+    @Query('userId') userId: string,
+  ) {
+    return this.transactionsService.findOne(id, userId);
   }
 
-  // DELETE /api/transactions/:id
+  // DELETE /api/transactions/:id?userId=
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id') id: string) {
-    return this.transactionsService.remove(id);
+  remove(
+    @Param('id') id: string,
+    @Query('userId') userId: string,
+  ) {
+    return this.transactionsService.remove(id, userId);
   }
 }
