@@ -1,0 +1,163 @@
+# ══════════════════════════════════════════════════════════════
+# BudgetTrack — GitLab CI/CD
+# ══════════════════════════════════════════════════════════════
+#
+# Pipeline :
+#   lint    → ESLint + TypeScript check  (backend & frontend, parallèle)
+#   build   → Build + push images Docker vers GitLab Container Registry
+#   deploy  → Déploiement prod via SSH   (manuel, branche main uniquement)
+#
+# Variables à définir dans GitLab → Settings → CI/CD → Variables :
+#
+#   SSH_PRIVATE_KEY   Clé privée SSH pour accéder au serveur de prod
+#   PROD_HOST         IP ou hostname du serveur (ex. 1.2.3.4)
+#   PROD_USER         Utilisateur SSH           (ex. ubuntu)
+#   PROD_DIR          Répertoire sur le serveur  (ex. /opt/budgettrack)
+#   PROD_APP_URL      URL publique de l'app      (ex. https://budget.example.com)
+#
+# ══════════════════════════════════════════════════════════════
+
+stages:
+  - lint
+  - build
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  BACKEND_IMAGE: $CI_REGISTRY_IMAGE/backend
+  FRONTEND_IMAGE: $CI_REGISTRY_IMAGE/frontend
+
+# ── Cache Yarn (partagé par stage) ────────────────────────────
+
+.cache-backend:
+  cache:
+    key:
+      files: [backend/yarn.lock]
+    paths: [backend/node_modules/]
+    policy: pull-push
+
+.cache-frontend:
+  cache:
+    key:
+      files: [frontend/yarn.lock]
+    paths: [frontend/node_modules/]
+    policy: pull-push
+
+# ══════════════════════════════════════════════════════════════
+# STAGE 1 — LINT
+# ══════════════════════════════════════════════════════════════
+
+lint:backend:
+  stage: lint
+  image: node:20-alpine
+  extends: .cache-backend
+  before_script:
+    - cd backend
+    - yarn install --frozen-lockfile
+  script:
+    - npx tsc --noEmit
+    - yarn lint
+
+lint:frontend:
+  stage: lint
+  image: node:20-alpine
+  extends: .cache-frontend
+  before_script:
+    - cd frontend
+    - yarn install --frozen-lockfile
+  script:
+    - npx tsc --noEmit
+    - yarn lint
+
+# ══════════════════════════════════════════════════════════════
+# STAGE 2 — BUILD (images Docker → GitLab Container Registry)
+# Déclenché uniquement sur main et develop
+# ══════════════════════════════════════════════════════════════
+
+.docker-login: &docker-login
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+
+build:backend:
+  stage: build
+  <<: *docker-login
+  needs: [lint:backend]
+  script:
+    - docker build
+        -t "$BACKEND_IMAGE:$CI_COMMIT_SHA"
+        -t "$BACKEND_IMAGE:latest"
+        ./backend
+    - docker push "$BACKEND_IMAGE:$CI_COMMIT_SHA"
+    - docker push "$BACKEND_IMAGE:latest"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
+
+build:frontend:
+  stage: build
+  <<: *docker-login
+  needs: [lint:frontend]
+  script:
+    - docker build
+        -t "$FRONTEND_IMAGE:$CI_COMMIT_SHA"
+        -t "$FRONTEND_IMAGE:latest"
+        ./frontend
+    - docker push "$FRONTEND_IMAGE:$CI_COMMIT_SHA"
+    - docker push "$FRONTEND_IMAGE:latest"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
+
+# ══════════════════════════════════════════════════════════════
+# STAGE 3 — DEPLOY (manuel, main uniquement)
+#
+# Flux :
+#   1. SSH sur le serveur de prod
+#   2. docker login sur le GitLab Registry
+#   3. Pull des nouvelles images (backend + frontend)
+#   4. docker compose up -d  (zero-downtime rolling restart)
+#   5. Nettoyage des anciennes images
+# ══════════════════════════════════════════════════════════════
+
+deploy:production:
+  stage: deploy
+  image: alpine:3.19
+  needs: [build:backend, build:frontend]
+  environment:
+    name: production
+    url: $PROD_APP_URL
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan -H "$PROD_HOST" >> ~/.ssh/known_hosts
+  script:
+    - |
+      ssh "$PROD_USER@$PROD_HOST" bash << EOF
+        set -e
+        cd "$PROD_DIR"
+
+        # Authentification au registry GitLab
+        docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+
+        # Export des variables pour docker compose
+        export BACKEND_IMAGE="$BACKEND_IMAGE"
+        export FRONTEND_IMAGE="$FRONTEND_IMAGE"
+        export TAG="$CI_COMMIT_SHA"
+
+        # Pull + redémarrage sans interruption
+        docker compose -f docker-compose.prod.yml pull
+        docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+        # Nettoyage des images obsolètes
+        docker image prune -f
+
+        echo "✓ Déploiement $CI_COMMIT_SHORT_SHA terminé"
+      EOF
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+    - when: never

@@ -6,7 +6,7 @@ COPY package*.json ./
 RUN yarn install --immutable
 
 COPY prisma ./prisma
-RUN ynpx prisma generate
+RUN npx prisma generate
 
 COPY . .
 RUN yarn build
@@ -27,4 +27,4 @@ COPY --from=builder /app/dist ./dist
 EXPOSE 8080
 
 # Applique les migrations puis démarre
-CMD ["sh", "-c", "ynpx prisma migrate deploy && node dist/main"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]

@@ -1,0 +1,65 @@
+# ══════════════════════════════════════════════════════════════
+# docker-compose.prod.yml — Déploiement production
+#
+# Utilise les images pré-buildées depuis le GitLab Container Registry
+# au lieu de rebuilder en local.
+#
+# Variables injectées par le pipeline CI/CD :
+#   BACKEND_IMAGE   ex. registry.gitlab.com/group/project/backend
+#   FRONTEND_IMAGE  ex. registry.gitlab.com/group/project/frontend
+#   TAG             SHA du commit (ex. a1b2c3d4...)
+#
+# Sur le serveur, créer /opt/budgettrack/.env avec :
+#   POSTGRES_USER=budget
+#   POSTGRES_PASSWORD=<mot_de_passe_fort>
+#   POSTGRES_DB=budget_tracker
+#   DATABASE_URL=postgresql://budget:<password>@postgres:5432/budget_tracker
+# ══════════════════════════════════════════════════════════════
+
+version: '3.9'
+
+services:
+
+  # ── PostgreSQL ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: budget-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB:       ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── NestJS API ─────────────────────────────────────────────
+  backend:
+    image: ${BACKEND_IMAGE}:${TAG:-latest}
+    container_name: budget-backend
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── React / Nginx ──────────────────────────────────────────
+  frontend:
+    image: ${FRONTEND_IMAGE}:${TAG:-latest}
+    container_name: budget-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
+    name: budget-tracking-postgres
