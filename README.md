@@ -1,6 +1,6 @@
 # 💰 BudgetTrack
 
-Gestion de budget personnel — dépenses & revenus avec MongoDB, NestJS et React + TanStack Query.
+Gestion de budget personnel — dépenses & revenus
 
 ## Stack
 
@@ -9,7 +9,7 @@ Gestion de budget personnel — dépenses & revenus avec MongoDB, NestJS et Reac
 | Frontend | React 18 · TypeScript · Vite |
 | État serveur | **TanStack Query v5** |
 | Backend | **NestJS** · TypeScript |
-| Base de données | **MongoDB 7** via Mongoose |
+| Base de données | **Postgres 7** 
 | Containerisation | **Docker Compose** |
 | Déploiement frontend | **Netlify** |
 
